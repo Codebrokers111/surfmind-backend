@@ -24,7 +24,7 @@ redis_client = redis.Redis(connection_pool=pool)
 
 @app.route('/')
 def hello_world():
-    return jsonify({"status":status,"Value":'surflog server running successfully',"Version":1.0})
+    return jsonify({"status":status,"Value":'surfmind server running successfully',"Version":1.0})
 
 @app.route('/ingest/<sid>', methods=['POST'])
 def ingest(sid):
@@ -63,4 +63,4 @@ def search(sid):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=8000)
