@@ -3,8 +3,6 @@ from flask_cors import CORS
 from core import Document, Core
 from dotenv import load_dotenv
 load_dotenv()
-import redis
-import pickle
 import os
 
 
