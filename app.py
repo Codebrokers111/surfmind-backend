@@ -26,31 +26,22 @@ redis_client = redis.Redis(connection_pool=pool)
 def hello_world():
     return jsonify({"status":status,"Value":'surfmind server running successfully',"Version":1.0})
 
-@app.route('/ingest/<sid>', methods=['POST'])
-def ingest(sid):
+
+@app.route('/search', methods=['POST'])
+def search():
     data = request.json
+    history = data.get('data')
+    ques = data.get('query')
+    core=Core()
     print('got data from server')
     docs=[]
-    for x in data['dataa']:
+    for x in history:
         doc = Document(x["content"],{'source': x['url'], 'date':x['date']})
         docs.append(doc)
     print('making docs\n')
-    core = Core()
     process_docs = core.makeDocs(docs)
-    print('saving in redis')
-    redis_client.set(sid, pickle.dumps(process_docs))
-    return jsonify({"status": "success"}), 200
-
-@app.route('/search/<sid>', methods=['POST'])
-def search(sid):
-    data = request.json
-    ques = data.get('query')
-    core=Core()
     print('inside search')
     chain = core.LLMResponse()
-    print('getting from redis')
-    content = redis_client.get(sid)
-    process_docs = pickle.loads(content)
     print('getting result')
     docs = process_docs.invoke(ques)
     context = docs[0].page_content
@@ -58,8 +49,10 @@ def search(sid):
     date= docs[0].metadata['date']
     print('getting AI response')
     result = chain.invoke([context,date,url])
-    res = jsonify({"success":True,"result":result})
-    return (res)
+    pchain = core.structure()
+    finalOutput = pchain.invoke({"content":result})
+    res = jsonify({"success":True,"result":result,"format":finalOutput})
+    return res
 
 
 if __name__ == '__main__':
