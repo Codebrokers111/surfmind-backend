@@ -13,12 +13,6 @@ status = "active"
 
 os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
 
-redis_host = os.getenv('REDIS_HOST')
-redis_port = os.getenv('REDIS_PORT')
-
-pool = redis.ConnectionPool(host=redis_host, port=redis_port, db=0)
-redis_client = redis.Redis(connection_pool=pool)
-
 
 @app.route('/')
 def hello_world():
