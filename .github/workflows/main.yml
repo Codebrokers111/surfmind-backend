@@ -15,7 +15,10 @@ jobs:
     runs-on: ubuntu-latest
 
     # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:       
+    steps: 
+    - name: Install Python and dependencies
+      run: |
+        pip install -r surfmind/surfmind-backend/requirements.txt
     - name: Deploy using ssh
       uses: appleboy/ssh-action@master
       with:
