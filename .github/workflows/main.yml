@@ -27,4 +27,6 @@ jobs:
           cd surfmind/surfmind-backend
           git pull origin main
           git status
+          source senv/bin/activate
+          pip install -r requirements.txt
           sudo -A systemctl restart sm.service
