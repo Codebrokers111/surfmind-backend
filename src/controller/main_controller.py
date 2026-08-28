@@ -3,13 +3,17 @@ This module defines the primary application controller for the FastAPI backend.
 """
 
 import logging
+
 from fastapi import FastAPI
-from src.utility.logger import AppLogger
 from fastapi.middleware.cors import CORSMiddleware
+
 from src.controller.core_controller import router as core_router
+from src.controller.sync_controller import router as sync_router
+from src.utility.logger import AppLogger
+from src.utility.settings import settings
 
 AppLogger.init(
-    level=logging.INFO,
+    level=logging.DEBUG if settings.debug else logging.INFO,
     log_to_file=True,
 )
 
@@ -24,6 +28,7 @@ app.add_middleware(
 )
 
 app.include_router(core_router)
+app.include_router(sync_router)
 
 
 @app.get("/", tags=["Health"])
