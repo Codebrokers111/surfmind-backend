@@ -1,13 +1,4 @@
 # .github/workflows/staging.yml
-#
-# TEMPORARY bootstrap version — clones/updates the repo and sets up the
-# venv on the staging server, nothing else. No .env check, no migrations,
-# no systemd restart, since none of those exist on the server yet. The
-# venv is needed now so its interpreter/uvicorn path
-# (surfmind-backend-staging/senv/bin/...) is known before writing the
-# surfmind-staging.service unit and the nginx config by hand. Once .env
-# and the systemd unit exist, restore the full deploy flow (env check,
-# alembic upgrade, service restart) before the next push.
 name: Deploy Staging
 
 on:
@@ -19,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Bootstrap repo on staging server
+    - name: Deploy using ssh
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.HOST }}
@@ -47,6 +38,11 @@ jobs:
 
           cd surfmind-backend-staging
 
+          if [ ! -f .env ]; then
+            echo ".env is missing — copy it onto the server manually before deploying (DATABASE_URL, REDIS_HOST/PORT, OPENAI_API_KEY, GEMINI_API_KEY, ENVIRONMENT=production). Aborting."
+            exit 1
+          fi
+
           if [ ! -d senv ]; then
             echo "No virtualenv yet — creating one..."
             # Server has python3.12, not the python3.11 pyproject.toml
@@ -58,12 +54,22 @@ jobs:
           echo "Activating virtual environment..."
           source senv/bin/activate
 
-          echo "Installing dependencies..."
-          pip install -r requirements.txt
-          cp requirements.txt requirements.lock
+          echo "Checking dependencies..."
+          if [ ! -f requirements.lock ] || ! cmp -s requirements.txt requirements.lock; then
+            echo "Installing dependencies..."
+            pip install -r requirements.txt
+            cp requirements.txt requirements.lock
+          else
+            echo "Dependencies unchanged. Skipping install."
+          fi
 
-          echo "Bootstrap complete. Repo and venv are set up on the server at:"
-          echo "  $(pwd)"
-          echo "  interpreter: $(pwd)/senv/bin/python"
-          echo "  uvicorn:     $(pwd)/senv/bin/uvicorn"
-          echo "Nothing else was run: no .env check, no migrations, no service restart."
+          echo "Running database migrations..."
+          alembic upgrade head
+
+          echo "Reloading service (zero downtime)..."
+          sudo systemctl restart surfmind-staging.service || {
+            echo "Reload failed. Restarting service..."
+            sudo systemctl restart surfmind-staging.service
+          }
+
+          echo "Deployment completed successfully."
