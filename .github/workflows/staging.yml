@@ -20,16 +20,35 @@ jobs:
         script: |
           set -e
 
-          cd surfmind/surfmind-backend-staging || exit 1
+          mkdir -p surfmind
+          cd surfmind
+
+          if [ ! -d surfmind-backend-staging/.git ]; then
+            echo "No repo at surfmind-backend-staging yet — cloning (first deploy)..."
+            git clone git@github.com:mohdzain98/surfmind-backend.git surfmind-backend-staging
+          fi
+
+          cd surfmind-backend-staging
 
           echo "Fetching latest code..."
           git fetch origin
 
-          echo "Resetting to origin/main..."
-          git reset --hard origin/main
+          echo "Resetting to origin/staging..."
+          git checkout staging
+          git reset --hard origin/staging
 
           echo "Cleaning untracked files (excluding persistent data)..."
-          git clean -fd -e data/ -e logs/ -e senv/
+          git clean -fd -e data/ -e logs/ -e senv/ -e .env
+
+          if [ ! -f .env ]; then
+            echo ".env is missing — copy it onto the server manually before the first deploy (DATABASE_URL, REDIS_HOST/PORT, OPENAI_API_KEY, GEMINI_API_KEY, ENVIRONMENT=production). Aborting."
+            exit 1
+          fi
+
+          if [ ! -d senv ]; then
+            echo "No virtualenv yet — creating one (first deploy)..."
+            python3.11 -m venv senv
+          fi
 
           echo "Activating virtual environment..."
           source senv/bin/activate
@@ -43,10 +62,13 @@ jobs:
             echo "Dependencies unchanged. Skipping install."
           fi
 
+          echo "Running database migrations..."
+          alembic upgrade head
+
           echo "Reloading service (zero downtime)..."
-          sudo systemctl restart surfmind.service || {
+          sudo systemctl restart surfmind-staging.service || {
             echo "Reload failed. Restarting service..."
-            sudo systemctl restart surfmind.service
+            sudo systemctl restart surfmind-staging.service
           }
 
           echo "Deployment completed successfully."
