@@ -1,11 +1,13 @@
 # .github/workflows/staging.yml
 #
-# TEMPORARY bootstrap version — only clones/updates the repo on the
-# staging server. No .env check, no migrations, no systemd restart, since
-# none of those exist on the server yet. Once .env and the
-# surfmind-staging.service unit are set up manually on the server,
-# restore the full deploy flow (env check, venv, alembic upgrade,
-# service restart) before the next push.
+# TEMPORARY bootstrap version — clones/updates the repo and sets up the
+# venv on the staging server, nothing else. No .env check, no migrations,
+# no systemd restart, since none of those exist on the server yet. The
+# venv is needed now so its interpreter/uvicorn path
+# (surfmind-backend-staging/senv/bin/...) is known before writing the
+# surfmind-staging.service unit and the nginx config by hand. Once .env
+# and the systemd unit exist, restore the full deploy flow (env check,
+# alembic upgrade, service restart) before the next push.
 name: Deploy Staging
 
 on:
@@ -43,5 +45,20 @@ jobs:
             cd ..
           fi
 
-          echo "Bootstrap complete. Repo is cloned/updated on the server."
-          echo "Nothing else was run: no .env check, no venv, no migrations, no service restart."
+          if [ ! -d senv ]; then
+            echo "No virtualenv yet — creating one..."
+            python3.11 -m venv senv
+          fi
+
+          echo "Activating virtual environment..."
+          source senv/bin/activate
+
+          echo "Installing dependencies..."
+          pip install -r requirements.txt
+          cp requirements.txt requirements.lock
+
+          echo "Bootstrap complete. Repo and venv are set up on the server at:"
+          echo "  $(pwd)"
+          echo "  interpreter: $(pwd)/senv/bin/python"
+          echo "  uvicorn:     $(pwd)/senv/bin/uvicorn"
+          echo "Nothing else was run: no .env check, no migrations, no service restart."
