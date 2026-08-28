@@ -1,4 +1,11 @@
 # .github/workflows/staging.yml
+#
+# TEMPORARY bootstrap version — only clones/updates the repo on the
+# staging server. No .env check, no migrations, no systemd restart, since
+# none of those exist on the server yet. Once .env and the
+# surfmind-staging.service unit are set up manually on the server,
+# restore the full deploy flow (env check, venv, alembic upgrade,
+# service restart) before the next push.
 name: Deploy Staging
 
 on:
@@ -10,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Deploy using ssh
+    - name: Bootstrap repo on staging server
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.HOST }}
@@ -24,51 +31,17 @@ jobs:
           cd surfmind
 
           if [ ! -d surfmind-backend-staging/.git ]; then
-            echo "No repo at surfmind-backend-staging yet — cloning (first deploy)..."
+            echo "No repo at surfmind-backend-staging yet — cloning..."
             git clone git@github.com:mohdzain98/surfmind-backend.git surfmind-backend-staging
-          fi
-
-          cd surfmind-backend-staging
-
-          echo "Fetching latest code..."
-          git fetch origin
-
-          echo "Resetting to origin/staging..."
-          git checkout staging
-          git reset --hard origin/staging
-
-          echo "Cleaning untracked files (excluding persistent data)..."
-          git clean -fd -e data/ -e logs/ -e senv/ -e .env
-
-          if [ ! -f .env ]; then
-            echo ".env is missing — copy it onto the server manually before the first deploy (DATABASE_URL, REDIS_HOST/PORT, OPENAI_API_KEY, GEMINI_API_KEY, ENVIRONMENT=production). Aborting."
-            exit 1
-          fi
-
-          if [ ! -d senv ]; then
-            echo "No virtualenv yet — creating one (first deploy)..."
-            python3.11 -m venv senv
-          fi
-
-          echo "Activating virtual environment..."
-          source senv/bin/activate
-
-          echo "Checking dependencies..."
-          if [ ! -f requirements.lock ] || ! cmp -s requirements.txt requirements.lock; then
-            echo "Installing dependencies..."
-            pip install -r requirements.txt
-            cp requirements.txt requirements.lock
           else
-            echo "Dependencies unchanged. Skipping install."
+            echo "Repo already exists — fetching and resetting to origin/staging..."
+            cd surfmind-backend-staging
+            git fetch origin
+            git checkout staging
+            git reset --hard origin/staging
+            git clean -fd -e data/ -e logs/ -e senv/ -e .env
+            cd ..
           fi
 
-          echo "Running database migrations..."
-          alembic upgrade head
-
-          echo "Reloading service (zero downtime)..."
-          sudo systemctl restart surfmind-staging.service || {
-            echo "Reload failed. Restarting service..."
-            sudo systemctl restart surfmind-staging.service
-          }
-
-          echo "Deployment completed successfully."
+          echo "Bootstrap complete. Repo is cloned/updated on the server."
+          echo "Nothing else was run: no .env check, no venv, no migrations, no service restart."
