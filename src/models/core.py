@@ -145,6 +145,19 @@ class SearchResponse(BaseModel):
     docs: list
 
 
+class RecentSearchesRequest(BaseModel):
+    """Request schema for fetching an account's recent searches.
+
+    POST with the id in the body, not GET with a query param — same
+    reasoning as SyncStatusRequest: MV3 service workers don't reliably
+    send an Origin header on GET requests, breaking nginx's
+    Origin-allowlist check upstream.
+    """
+
+    browser_uuid: str = Field(validation_alias=AliasChoices("browser_uuid", "userId"))
+    limit: int = 5
+
+
 class GenerateCodeRequest(BaseModel):
     """Request schema for issuing a cross-browser sync pairing code."""
 

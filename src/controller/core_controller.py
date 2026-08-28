@@ -18,7 +18,13 @@ from starlette.background import BackgroundTask
 from src.db.session import async_session_factory, get_db
 from src.handlers.llm_exception_handler import llm_exc_handler
 from src.handlers.redis_exception_handler import redis_exc_handler
-from src.models.core import DataRequest, HistoryItem, SearchRequest, SearchResponse
+from src.models.core import (
+    DataRequest,
+    HistoryItem,
+    RecentSearchesRequest,
+    SearchRequest,
+    SearchResponse,
+)
 from src.services.core_service.main import CoreRetrieval, Retrieval
 from src.services.ingestion_service.ingestion import _default_heading_path, ingest_batch
 from src.services.privacy_service.privacy import clear_all_data, clear_history
@@ -315,14 +321,21 @@ async def search_stream(
     )
 
 
-@router.get("/recent-searches", response_model=Dict[str, Any])
+@router.post("/recent-searches", response_model=Dict[str, Any])
 async def recent_searches_route(
-    browser_uuid: str, limit: int = 5, db: AsyncSession = Depends(get_db)
+    payload: RecentSearchesRequest, db: AsyncSession = Depends(get_db)
 ):
-    """Return this browser's (or its linked account's) most recent searches."""
-    sync_account_id = await resolve_sync_account_id(browser_uuid=browser_uuid, db=db)
+    """Return this browser's (or its linked account's) most recent searches.
+
+    POST, not GET — MV3 service workers don't reliably send an Origin
+    header on GET requests, which broke nginx's Origin-allowlist check
+    upstream.
+    """
+    sync_account_id = await resolve_sync_account_id(
+        browser_uuid=payload.browser_uuid, db=db
+    )
     searches = await get_recent_searches(
-        user_id=str(sync_account_id), limit=limit, db=db
+        user_id=str(sync_account_id), limit=payload.limit, db=db
     )
     return {"searches": searches}
 
