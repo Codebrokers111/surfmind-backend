@@ -32,7 +32,7 @@ jobs:
             git fetch origin
             git checkout staging
             git reset --hard origin/staging
-            git clean -fd -e data/ -e logs/ -e senv/ -e .env
+            git clean -fd -e data/ -e logs/ -e senv/ -e .env -e requirements.lock
             cd ..
           fi
 
