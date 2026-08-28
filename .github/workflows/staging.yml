@@ -45,9 +45,14 @@ jobs:
             cd ..
           fi
 
+          cd surfmind-backend-staging
+
           if [ ! -d senv ]; then
             echo "No virtualenv yet — creating one..."
-            python3.11 -m venv senv
+            # Server has python3.12, not the python3.11 pyproject.toml
+            # targets locally — mainstream deps here (FastAPI, SQLAlchemy
+            # async, asyncpg, pgvector) have solid 3.12 support.
+            python3 -m venv senv
           fi
 
           echo "Activating virtual environment..."
