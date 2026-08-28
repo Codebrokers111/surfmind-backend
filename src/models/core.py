@@ -168,3 +168,17 @@ class UnlinkRequest(BaseModel):
     browser_uuid: str = Field(
         validation_alias=AliasChoices("browser_uuid", "browserUuid")
     )
+
+
+class SyncStatusRequest(BaseModel):
+    """Request schema for checking a browser's sync/link status.
+
+    POST with the id in the body, not GET with a query param — MV3 service
+    workers don't reliably send an Origin header on GET requests, which
+    breaks nginx's Origin-allowlist check upstream. POST requests carry
+    Origin consistently across browser contexts.
+    """
+
+    browser_uuid: str = Field(
+        validation_alias=AliasChoices("browser_uuid", "browserUuid")
+    )

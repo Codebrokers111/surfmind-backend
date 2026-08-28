@@ -11,7 +11,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.session import get_db
-from src.models.core import GenerateCodeRequest, RedeemCodeRequest, UnlinkRequest
+from src.models.core import (
+    GenerateCodeRequest,
+    RedeemCodeRequest,
+    SyncStatusRequest,
+    UnlinkRequest,
+)
 from src.services.sync_service.sync import (
     InvalidSyncCode,
     RateLimitExceeded,
@@ -64,12 +69,16 @@ async def unlink_route(payload: UnlinkRequest, db: AsyncSession = Depends(get_db
     return {"success": True, "syncAccountId": sync_account_id}
 
 
-@router.get("/status", response_model=Dict[str, Any])
-async def sync_status_route(browser_uuid: str, db: AsyncSession = Depends(get_db)):
+@router.post("/status", response_model=Dict[str, Any])
+async def sync_status_route(
+    payload: SyncStatusRequest, db: AsyncSession = Depends(get_db)
+):
     """Return the requesting browser's sync/link status.
 
-    Always 200 — a browser that's never made contact is a normal "not yet
-    linked" status (`sync_account_id: null`), not an error. Never
-    auto-creates an account for an unknown browser (read-only).
+    POST, not GET — MV3 service workers don't reliably send an Origin
+    header on GET requests, which broke nginx's Origin-allowlist check
+    upstream. Otherwise unchanged: always 200, a browser that's never made
+    contact is a normal "not yet linked" status (`sync_account_id: null`),
+    not an error, and this never auto-creates an account (read-only).
     """
-    return await get_sync_status(browser_uuid=browser_uuid, db=db)
+    return await get_sync_status(browser_uuid=payload.browser_uuid, db=db)
