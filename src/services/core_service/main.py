@@ -133,6 +133,7 @@ class CoreRetrieval:
             query=ques,
             parent_docs=parent_docs,
             user_id=user_id,
+            flag=flag,
             db=db,
         )
         if not retrieved_parents:
@@ -191,6 +192,7 @@ class CoreRetrieval:
             query=ques,
             parent_docs=parent_docs,
             user_id=user_id,
+            flag=flag,
             db=db,
         )
         yield self._stream_event(
@@ -284,21 +286,25 @@ class CoreRetrieval:
             yield self._stream_event("final", res.dict())
             return
 
-        async def _safe_retrieve(docs: List[Document]) -> List[Document]:
+        async def _safe_retrieve(docs: List[Document], flag: str) -> List[Document]:
             if not docs:
                 return []
             try:
                 return await self.rag.retrieve_parents(
-                    query=ques, parent_docs=docs, user_id=user_id, db=db
+                    query=ques, parent_docs=docs, user_id=user_id, flag=flag, db=db
                 )
             except Exception as exc:
                 logger.warning("Retrieval failed for corpus: %s", exc)
                 return []
 
         # Sequential, not concurrent: both calls share one AsyncSession, and
-        # SQLAlchemy's AsyncSession isn't safe for concurrent use.
-        history_parents = await _safe_retrieve(history_docs)
-        bookmark_parents = await _safe_retrieve(bookmark_docs)
+        # SQLAlchemy's AsyncSession isn't safe for concurrent use. Each call
+        # is scoped to its own flag so a bookmark page can't surface via the
+        # history-seeded call (or vice versa) — full history+bookmark
+        # coverage comes from making both calls, not from either call being
+        # unscoped.
+        history_parents = await _safe_retrieve(history_docs, flag="history")
+        bookmark_parents = await _safe_retrieve(bookmark_docs, flag="bookmark")
 
         total_retrieved = len(history_parents) + len(bookmark_parents)
         yield self._stream_event("retrieved_parents", {"count": total_retrieved})

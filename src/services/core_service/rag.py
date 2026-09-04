@@ -219,15 +219,20 @@ class HybridRAGService:
         return bm25
 
     async def _run_pgvector(
-        self, query: str, user_id: str, db: AsyncSession
+        self, query: str, user_id: str, flag: str, db: AsyncSession
     ) -> List[dict]:
-        """Rank this user's pages by their single best-matching section.
+        """Rank this user's `flag`-scoped pages by their single best-matching section.
 
         `DISTINCT ON (p.id)` picks each page's nearest section, structurally
         guaranteeing at most one hit per page — the inner query's rows land
         in `page_id` order though, not relevance order, so the outer query
         re-sorts by distance before `LIMIT :k` to actually return the k
         best-matching *pages*, not an arbitrary k of them.
+
+        Scoped by `flag` (`history` or `bookmark`) so a history search
+        can't surface bookmark pages and vice versa — combined search gets
+        full history+bookmark coverage by calling this twice, once per
+        flag, not by leaving it unscoped here.
         """
         query_vector = await self.embeddings.aembed_query(query)
         # Bound as a pgvector text literal + explicit cast — avoids needing
@@ -244,7 +249,7 @@ class HybridRAGService:
                     FROM section_embeddings e
                     JOIN page_sections ps ON ps.id = e.section_id
                     JOIN pages p ON p.id = ps.page_id
-                    WHERE p.user_id = :user_id
+                    WHERE p.user_id = :user_id AND p.flag = :flag
                     ORDER BY p.id, e.embedding <=> CAST(:query_embedding AS vector)
                 ) ranked
                 ORDER BY distance
@@ -254,6 +259,7 @@ class HybridRAGService:
                 # pages.user_id is a real Integer FK now (was a loose String
                 # column on the old history_entries table).
                 "user_id": int(user_id),
+                "flag": flag,
                 "query_embedding": embedding_literal,
                 "k": self.vector_k,
             },
@@ -313,11 +319,14 @@ class HybridRAGService:
         query: str,
         parent_docs: List[Document],
         user_id: str,
+        flag: str,
         db: AsyncSession,
     ) -> List[Document]:
         """
         Main hybrid retrieval entrypoint.
         Returns parent-level documents, ranked by combined BM25 + pgvector score.
+        `flag` scopes both signals to one corpus (history or bookmark) —
+        callers wanting combined coverage call this twice, once per flag.
         """
         # Step 1: build child docs (BM25 only — pgvector reads persisted rows)
         child_docs, parents = self._build_child_documents(parent_docs)
@@ -333,7 +342,7 @@ class HybridRAGService:
         # Step 2 & 3: BM25 (sync, off the event loop) and pgvector concurrently
         bm25_hits, vector_rows = await asyncio.gather(
             asyncio.to_thread(_run_bm25),
-            self._run_pgvector(query=query, user_id=user_id, db=db),
+            self._run_pgvector(query=query, user_id=user_id, flag=flag, db=db),
         )
 
         # Step 4: extend parents with vector-only hits, then merge + map back
